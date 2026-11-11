@@ -7,22 +7,27 @@ import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
 
 import br.com.fiap.fasetres.entity.Usuario;
 import br.com.fiap.fasetres.repository.UsuarioRepository;
 
+@Service 
 public class CustomUserDetailsService implements UserDetailsService {
 
+     
     private final UsuarioRepository usuarioRepository;
 
+    
     public CustomUserDetailsService(UsuarioRepository usuarioRepository) {
         this.usuarioRepository = usuarioRepository;
     }
 
+    
     @Override
     public UserDetails loadUserByUsername(String nome) throws UsernameNotFoundException {
-        Usuario usuario = usuarioRepository.findUsuarioByNome(nome).orElseThrow(() -> new UsernameNotFoundException("User not found with nome: " + nome));
-        var roles = usuario.getRoles().stream().map(role -> new SimpleGrantedAuthority(role.getNome()))
+        Usuario usuario = usuarioRepository.findUsuarioByNome(nome).orElseThrow(() -> new UsernameNotFoundException("Usuario nao encontrado com nome " + nome));
+        var roles = usuario.getRoles().stream().map(role -> new SimpleGrantedAuthority("ROLE_" + role.getNome()))
         .collect(Collectors.toList());
         return User.builder()
                 .username(usuario.getNome())
