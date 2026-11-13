@@ -1,90 +1,72 @@
 package br.com.fiap.fasetres.config;
 
-import java.io.IOException;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.stereotype.Component;
 
-import br.com.fiap.fasetres.service.CustomUserDetailsService;
+import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
+
 import br.com.fiap.fasetres.service.PlainTextPasswordEnconder;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 
-@Configuration
+
+@Component 
 @EnableWebSecurity  
 public class SecurityConfig {
 
-    private final CustomUserDetailsService userDetailsService;
+    @Value ("${jwt.public.key}")
+    private RSAPublicKey publicKey;
 
-    public SecurityConfig(CustomUserDetailsService customUserDetailsService ) {
-        this.userDetailsService = customUserDetailsService;
+    @Value ("${jwt.private.key}")
+    private RSAPrivateKey privateKey;
+    
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http.authorizeHttpRequests(auth -> auth
+                .requestMatchers("/error","/h2-console/**", "/auth/**").permitAll()
+                //.requestMatchers("/paciente/**").hasRole("PACIENTE")
+                //.requestMatchers("/medico/**").hasRole("MEDICO")
+                //.requestMatchers("/enfermeiro/**").hasRole("ENFERMEIRO")
+                .anyRequest().authenticated())
+            .httpBasic(Customizer.withDefaults())
+            .oauth2ResourceServer(config -> config.jwt(Customizer.withDefaults()));
+
+        http.headers(headers -> headers.frameOptions(frameOptions -> frameOptions.disable()));
+        http.csrf(csrf -> csrf.disable());
+        return http.build();
     }
 
     @Bean 
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) throws Exception {
-        return authenticationConfiguration.getAuthenticationManager();
+    JwtDecoder jwtDecoder() {
+        return NimbusJwtDecoder.withPublicKey(publicKey).build();
     }
+
+    @Bean
+    JwtEncoder jwtEncoder() {
+        var jwk = new RSAKey.Builder(publicKey).privateKey(privateKey).build();
+        var jwks = new ImmutableJWKSet<>(new JWKSet(jwk));
+        return new NimbusJwtEncoder(jwks);
+    }
+
 
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new PlainTextPasswordEnconder(); 
     }
 
-    @Bean
-    public DaoAuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider(userDetailsService);
-        authProvider.setPasswordEncoder(passwordEncoder());
-        return authProvider;
-    }
-
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http.authorizeHttpRequests(authorizeRequests -> 
-            authorizeRequests
-                .requestMatchers("/error","/h2-console/**").permitAll()
-                .requestMatchers("/paciente/**").hasRole("PACIENTE")
-                .requestMatchers("/medico/**").hasRole("MEDICO")
-                .requestMatchers("/enfermeiro/**").hasRole("ENFERMEIRO")
-                .anyRequest().authenticated()
-        ).formLogin(form -> form.successHandler(
-                customAuthenticationSuccessHandler())
-            ).logout(logout -> logout.permitAll());
-
-        http.headers(headers -> headers.frameOptions(frameOptions -> frameOptions.disable()));
-        http.csrf(csrf -> csrf.ignoringRequestMatchers("/h2-console/**"));
-        return http.build();
-    }
-
-    @Bean 
-    public AuthenticationSuccessHandler customAuthenticationSuccessHandler() {
-        return new AuthenticationSuccessHandler(){
-            @Override
-            public void onAuthenticationSuccess(HttpServletRequest request,
-                    HttpServletResponse response,
-                    Authentication authentication)
-                    throws IOException, ServletException {
-                var authorities = authentication.getAuthorities();
-                if (authorities.stream().anyMatch(a -> a.getAuthority().equals("ROLE_PACIENTE"))) {
-                    response.sendRedirect("/paciente");
-                } else if (authorities.stream().anyMatch(a -> a.getAuthority().equals("ROLE_MEDICO"))) {
-                    response.sendRedirect("/medico");
-                } else if (authorities.stream().anyMatch(a -> a.getAuthority().equals("ROLE_ENFERMEIRO"))) {
-                    response.sendRedirect("/enfermeiro");
-                } else {
-                    response.sendRedirect("/error");
-                }
-            }
-        };
-    }
 }
