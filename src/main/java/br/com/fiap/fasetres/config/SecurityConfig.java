@@ -31,10 +31,10 @@ import br.com.fiap.fasetres.service.PlainTextPasswordEnconder;
 @EnableWebSecurity  
 public class SecurityConfig {
 
-    @Value("classpath:public.key")
+    @Value("${jwt.public-key}")
     private RSAPublicKey publicKey;
 
-    @Value("classpath:private.key")
+    @Value("${jwt.private-key}")
     private RSAPrivateKey privateKey;
     
 
